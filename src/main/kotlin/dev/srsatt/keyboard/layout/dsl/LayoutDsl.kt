@@ -1,7 +1,9 @@
 package dev.srsatt.keyboard.layout.dsl
 
 import dev.srsatt.keyboard.layout.model.BindingIntent
+import dev.srsatt.keyboard.layout.model.ChordKeys
 import dev.srsatt.keyboard.layout.model.DeclaredBinding
+import dev.srsatt.keyboard.layout.model.DeclaredChord
 import dev.srsatt.keyboard.layout.model.DisabledIntent
 import dev.srsatt.keyboard.layout.model.HoldIntent
 import dev.srsatt.keyboard.layout.model.Holdable
@@ -17,6 +19,7 @@ import dev.srsatt.keyboard.layout.model.Performable
 import dev.srsatt.keyboard.layout.model.PhysicalGroup
 import dev.srsatt.keyboard.layout.model.SendIntent
 import dev.srsatt.keyboard.layout.model.Sendable
+import dev.srsatt.keyboard.layout.model.SourceProvenance
 import dev.srsatt.keyboard.layout.model.SymbolRef
 import dev.srsatt.keyboard.layout.model.TextRef
 import dev.srsatt.keyboard.layout.model.TransparentIntent
@@ -67,7 +70,9 @@ class LayerScope internal constructor(
     private val requiresDefault: Boolean,
 ) {
     private val bindings = mutableListOf<DeclaredBinding>()
+    private val chords = mutableListOf<DeclaredChord>()
     private val groupStack = ArrayDeque<Set<KeyPosition>>()
+    private val sharedChordKeys = ArrayDeque<List<KeyPosition>>()
     private var overlayDefault: OverlayDefault? = null
 
     val default: DefaultTarget
@@ -88,6 +93,22 @@ class LayerScope internal constructor(
         }
     }
 
+    infix fun KeyPosition.and(other: KeyPosition) = ChordKeys.from(listOf(this, other))
+
+    infix fun ChordKeys.and(other: KeyPosition) = ChordKeys.from(positions + other)
+
+    fun chordsWith(vararg groups: PhysicalGroup, block: LayerScope.() -> Unit) {
+        val added = groups.flatMap(PhysicalGroup::positions)
+        require(added.isNotEmpty()) { "chordsWith requires at least one shared physical position" }
+        validateUniqueChordPositions(sharedChordKeys.flatten() + added)
+        sharedChordKeys.addLast(added)
+        try {
+            block()
+        } finally {
+            sharedChordKeys.removeLast()
+        }
+    }
+
     infix fun KeyPosition.sends(value: Sendable) = bind(this, SendIntent(value))
 
     infix fun KeyPosition.holds(value: Holdable) = bind(this, HoldIntent(value))
@@ -97,6 +118,16 @@ class LayerScope internal constructor(
     infix fun KeyPosition.types(value: SymbolRef) = bind(this, TypeIntent(value))
 
     infix fun KeyPosition.types(value: TextRef) = bind(this, TypeIntent(value))
+
+    infix fun ChordKeys.sends(value: Sendable) = bindChord(this, SendIntent(value))
+
+    infix fun ChordKeys.holds(value: Holdable) = bindChord(this, HoldIntent(value))
+
+    infix fun ChordKeys.performs(value: Performable) = bindChord(this, PerformIntent(value))
+
+    infix fun ChordKeys.types(value: SymbolRef) = bindChord(this, TypeIntent(value))
+
+    infix fun ChordKeys.types(value: TextRef) = bindChord(this, TypeIntent(value))
 
     infix fun PhysicalGroup.types(value: String) {
         val codePoints = value.codePoints().toArray()
@@ -124,7 +155,7 @@ class LayerScope internal constructor(
         require(!requiresDefault || overlayDefault != null) {
             "Overlay ${context.describe()} must declare `default does Nothing` or `default inherits Below`"
         }
-        return LayerDefinition(context, overlayDefault, bindings.toList())
+        return LayerDefinition(context, overlayDefault, bindings.toList(), chords.toList())
     }
 
     private fun bind(position: KeyPosition, intent: BindingIntent) {
@@ -132,7 +163,23 @@ class LayerScope internal constructor(
         require(group == null || position in group) {
             "Position '${position.id}' is outside the current physical group"
         }
-        bindings += DeclaredBinding(position, intent)
+        if (sharedChordKeys.isEmpty()) {
+            bindings += DeclaredBinding(position, intent)
+        } else {
+            recordChord(ChordKeys.from(sharedChordKeys.flatten() + position), intent)
+        }
+    }
+
+    private fun bindChord(keys: ChordKeys, intent: BindingIntent) {
+        val group = groupStack.lastOrNull()
+        require(group == null || group.containsAll(keys.positions)) {
+            "Chord contains positions outside the current physical group"
+        }
+        recordChord(ChordKeys.from(sharedChordKeys.flatten() + keys.positions), intent)
+    }
+
+    private fun recordChord(keys: ChordKeys, intent: BindingIntent) {
+        chords += DeclaredChord(keys, intent, sourceProvenance())
     }
 
     private fun setDefault(value: OverlayDefault) {
@@ -140,6 +187,24 @@ class LayerScope internal constructor(
         require(overlayDefault == null) { "Overlay ${context.describe()} declares its default more than once" }
         overlayDefault = value
     }
+}
+
+private fun validateUniqueChordPositions(positions: List<KeyPosition>) {
+    val duplicateIds = positions.groupBy(KeyPosition::id).filterValues { it.size > 1 }.keys.sorted()
+    require(duplicateIds.isEmpty()) {
+        "Chord repeats physical position aliases: ${duplicateIds.joinToString()}"
+    }
+}
+
+private fun sourceProvenance(): SourceProvenance {
+    val frame = Thread.currentThread().stackTrace.firstOrNull {
+        it.fileName?.endsWith(".kt") == true &&
+            !it.className.startsWith("dev.srsatt.keyboard.layout.dsl.LayerScope") &&
+            !it.className.startsWith("dev.srsatt.keyboard.layout.dsl.LayoutDslKt")
+    }
+    val packagePath = frame?.className?.substringBeforeLast('.', "")?.replace('.', '/')
+    val file = listOfNotNull(packagePath?.takeIf(String::isNotEmpty), frame?.fileName).joinToString("/")
+    return SourceProvenance(file.ifEmpty { "<unknown>" }, frame?.lineNumber?.takeIf { it > 0 } ?: 1)
 }
 
 data object DefaultTarget

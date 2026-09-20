@@ -105,8 +105,8 @@ class LayoutDslTest {
         assertFalse(Holdable::class.java.isAssignableFrom(CommandRef::class.java))
 
         val holdMethods = LayerScope::class.java.declaredMethods.filter { it.name == "holds" }
-        assertEquals(1, holdMethods.size)
-        assertEquals(Holdable::class.java, holdMethods.single().parameterTypes.last())
+        assertEquals(2, holdMethods.size)
+        assertTrue(holdMethods.all { it.parameterTypes.last() == Holdable::class.java })
     }
 
     private class TestBoard {

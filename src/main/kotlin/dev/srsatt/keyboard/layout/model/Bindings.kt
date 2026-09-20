@@ -109,6 +109,7 @@ data class LayerDefinition(
     val context: LayerContext,
     val default: OverlayDefault?,
     val bindings: List<DeclaredBinding>,
+    val chords: List<DeclaredChord> = emptyList(),
 )
 
 data class Layout(
