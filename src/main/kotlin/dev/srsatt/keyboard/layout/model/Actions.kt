@@ -51,7 +51,7 @@ sealed interface ActionImplementation {
     val delivery: ActionDelivery
 }
 
-data class GeneralActionImplementation(val stroke: Stroke) : ActionImplementation {
+data class GeneralActionImplementation(val effects: List<ActionEffect>) : ActionImplementation {
     override val delivery = ActionDelivery.ONCE
 }
 
@@ -116,18 +116,6 @@ fun shortcutAction(id: String, stroke: Stroke): KeystrokeActionRef =
 fun hostAction(id: String): HostActionRef {
     requireActionId(id)
     return HostActionRef(id)
-}
-
-class TapScope internal constructor() {
-    private var implementation: GeneralActionImplementation? = null
-
-    fun tap(stroke: Stroke) {
-        require(implementation == null) { "A general action implementation can contain only one tap" }
-        implementation = GeneralActionImplementation(stroke)
-    }
-
-    internal fun build(): GeneralActionImplementation =
-        requireNotNull(implementation) { "A general action implementation must declare a tap" }
 }
 
 class ActionBuilder internal constructor() {
