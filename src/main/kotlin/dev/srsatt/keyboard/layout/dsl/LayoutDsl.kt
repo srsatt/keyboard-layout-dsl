@@ -18,6 +18,7 @@ import dev.srsatt.keyboard.layout.model.PhysicalGroup
 import dev.srsatt.keyboard.layout.model.SendIntent
 import dev.srsatt.keyboard.layout.model.Sendable
 import dev.srsatt.keyboard.layout.model.SymbolRef
+import dev.srsatt.keyboard.layout.model.TextRef
 import dev.srsatt.keyboard.layout.model.TransparentIntent
 import dev.srsatt.keyboard.layout.model.TypeIntent
 
@@ -43,6 +44,14 @@ class LayoutScope internal constructor(private val id: String) {
 
     fun language(language: LanguageRef, block: LayerScope.() -> Unit) {
         layers += LayerScope(LayerContext.Language(language), requiresDefault = false).apply(block).build()
+    }
+
+    fun shifted(block: LayerScope.() -> Unit) {
+        layers += LayerScope(LayerContext.Shift, requiresDefault = false).apply(block).build()
+    }
+
+    fun shifted(language: LanguageRef, block: LayerScope.() -> Unit) {
+        layers += LayerScope(LayerContext.ShiftedLanguage(language), requiresDefault = false).apply(block).build()
     }
 
     fun on(layer: LayerRef, block: LayerScope.() -> Unit) {
@@ -86,6 +95,8 @@ class LayerScope internal constructor(
     infix fun KeyPosition.performs(value: Performable) = bind(this, PerformIntent(value))
 
     infix fun KeyPosition.types(value: SymbolRef) = bind(this, TypeIntent(value))
+
+    infix fun KeyPosition.types(value: TextRef) = bind(this, TypeIntent(value))
 
     infix fun PhysicalGroup.types(value: String) {
         val codePoints = value.codePoints().toArray()
@@ -136,5 +147,7 @@ data object DefaultTarget
 private fun LayerContext.describe() = when (this) {
     LayerContext.Base -> "Base"
     is LayerContext.Language -> "language '${language.id}'"
+    LayerContext.Shift -> "Shift"
+    is LayerContext.ShiftedLanguage -> "shifted language '${language.id}'"
     is LayerContext.Overlay -> "'${layer.id}'"
 }
