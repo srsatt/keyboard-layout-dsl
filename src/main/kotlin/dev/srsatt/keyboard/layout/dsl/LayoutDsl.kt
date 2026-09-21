@@ -23,6 +23,7 @@ import dev.srsatt.keyboard.layout.model.SourceProvenance
 import dev.srsatt.keyboard.layout.model.SymbolRef
 import dev.srsatt.keyboard.layout.model.TextRef
 import dev.srsatt.keyboard.layout.model.TransparentIntent
+import dev.srsatt.keyboard.layout.model.TriggerBehavior
 import dev.srsatt.keyboard.layout.model.TypeIntent
 
 @DslMarker
@@ -73,6 +74,7 @@ class LayerScope internal constructor(
     private val chords = mutableListOf<DeclaredChord>()
     private val groupStack = ArrayDeque<Set<KeyPosition>>()
     private val sharedChordKeys = ArrayDeque<List<KeyPosition>>()
+    private val triggerBehaviors = ArrayDeque<TriggerBehavior>()
     private var overlayDefault: OverlayDefault? = null
 
     val default: DefaultTarget
@@ -108,6 +110,14 @@ class LayerScope internal constructor(
             sharedChordKeys.removeLast()
         }
     }
+
+    fun deferred(block: LayerScope.() -> Unit) = withTriggerBehavior(TriggerBehavior.DEFERRED, block)
+
+    fun immediateReversible(block: LayerScope.() -> Unit) =
+        withTriggerBehavior(TriggerBehavior.IMMEDIATE_REVERSIBLE, block)
+
+    fun immediateOpaqueOrDestructive(block: LayerScope.() -> Unit) =
+        withTriggerBehavior(TriggerBehavior.IMMEDIATE_OPAQUE_OR_DESTRUCTIVE, block)
 
     infix fun KeyPosition.sends(value: Sendable) = bind(this, SendIntent(value))
 
@@ -164,7 +174,12 @@ class LayerScope internal constructor(
             "Position '${position.id}' is outside the current physical group"
         }
         if (sharedChordKeys.isEmpty()) {
-            bindings += DeclaredBinding(position, intent, sourceProvenance())
+            bindings += DeclaredBinding(
+                position = position,
+                intent = intent,
+                source = sourceProvenance(),
+                triggerBehavior = triggerBehaviors.lastOrNull() ?: TriggerBehavior.DEFERRED,
+            )
         } else {
             recordChord(ChordKeys.from(sharedChordKeys.flatten() + position), intent)
         }
@@ -179,7 +194,21 @@ class LayerScope internal constructor(
     }
 
     private fun recordChord(keys: ChordKeys, intent: BindingIntent) {
-        chords += DeclaredChord(keys, intent, sourceProvenance())
+        chords += DeclaredChord(
+            keys = keys,
+            intent = intent,
+            source = sourceProvenance(),
+            triggerBehavior = triggerBehaviors.lastOrNull() ?: TriggerBehavior.DEFERRED,
+        )
+    }
+
+    private fun withTriggerBehavior(behavior: TriggerBehavior, block: LayerScope.() -> Unit) {
+        triggerBehaviors.addLast(behavior)
+        try {
+            block()
+        } finally {
+            triggerBehaviors.removeLast()
+        }
     }
 
     private fun setDefault(value: OverlayDefault) {

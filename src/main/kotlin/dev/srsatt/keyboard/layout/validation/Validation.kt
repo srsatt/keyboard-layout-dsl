@@ -7,6 +7,7 @@ import dev.srsatt.keyboard.layout.model.LayerContext
 import dev.srsatt.keyboard.layout.model.Layout
 import dev.srsatt.keyboard.layout.model.SourceProvenance
 import dev.srsatt.keyboard.layout.model.TransparentIntent
+import dev.srsatt.keyboard.layout.model.TriggerBehavior
 
 /** Validates conflicts only after all ordinary Kotlin layout fragments have contributed. */
 fun validateLayout(layout: Layout) {
@@ -19,6 +20,7 @@ fun validateLayout(layout: Layout) {
     val conflicts = buildList {
         addAll(bindingConflicts(declarations))
         addAll(chordConflicts(chords))
+        addAll(recognitionConflicts(declarations, chords))
     }.sorted()
 
     require(conflicts.isEmpty()) {
@@ -74,6 +76,63 @@ private fun chordConflicts(declarations: List<ChordDeclaration>) = pairs(declara
     }
 }
 
+private data class TriggerCandidate(
+    val keys: Set<String>,
+    val behavior: TriggerBehavior,
+    val source: SourceProvenance,
+    val context: LayerContext,
+)
+
+private fun recognitionConflicts(
+    bindings: List<BindingDeclaration>,
+    chords: List<ChordDeclaration>,
+): List<String> {
+    val candidates = buildList {
+        bindings.filterNot { it.binding.intent is TransparentIntent }.forEach {
+            add(
+                TriggerCandidate(
+                    keys = setOf(it.binding.position.id),
+                    behavior = it.binding.triggerBehavior,
+                    source = it.binding.source,
+                    context = it.context,
+                ),
+            )
+        }
+        chords.forEach {
+            add(
+                TriggerCandidate(
+                    keys = it.chord.keys.positions.mapTo(linkedSetOf()) { position -> position.id },
+                    behavior = it.chord.triggerBehavior,
+                    source = it.chord.source,
+                    context = it.context,
+                ),
+            )
+        }
+    }
+
+    return pairs(candidates).mapNotNull { (first, second) ->
+        if (!first.context.condition().overlaps(second.context.condition())) return@mapNotNull null
+        val shared = first.keys intersect second.keys
+        if (shared.isEmpty() || first.keys == second.keys) return@mapNotNull null
+
+        val smaller = when {
+            second.keys.containsAll(first.keys) -> first
+            first.keys.containsAll(second.keys) -> second
+            else -> return@mapNotNull "ambiguous partial chord overlap ${first.keys.describe()} and " +
+                "${second.keys.describe()} at ${first.source.location()} and ${second.source.location()}"
+        }
+        if (smaller.behavior == TriggerBehavior.IMMEDIATE_OPAQUE_OR_DESTRUCTIVE) {
+            "unsafe immediate prefix ${smaller.keys.describe()} for ${
+                (if (smaller === first) second else first).keys.describe()
+            } at ${smaller.source.location()} and ${
+                (if (smaller === first) second else first).source.location()
+            }"
+        } else {
+            null
+        }
+    }.toList()
+}
+
 private fun LayerContext.condition() = when (this) {
     LayerContext.Base -> EffectiveCondition()
     is LayerContext.Language -> EffectiveCondition(language = language)
@@ -100,6 +159,8 @@ private fun LayerContext.describe() = when (this) {
 }
 
 private fun SourceProvenance.location() = "$file:$line"
+
+private fun Set<String>.describe() = sorted().joinToString(prefix = "[", postfix = "]")
 
 private fun <T> pairs(values: List<T>) = sequence {
     for (first in values.indices) {

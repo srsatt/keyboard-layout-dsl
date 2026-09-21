@@ -32,8 +32,16 @@ data class SourceProvenance(
     }
 }
 
+/** Portable recognition behavior while a larger trigger can still match. */
+enum class TriggerBehavior {
+    DEFERRED,
+    IMMEDIATE_REVERSIBLE,
+    IMMEDIATE_OPAQUE_OR_DESTRUCTIVE,
+}
+
 data class DeclaredChord(
     val keys: ChordKeys,
     val intent: BindingIntent,
     val source: SourceProvenance,
+    val triggerBehavior: TriggerBehavior = TriggerBehavior.DEFERRED,
 )

@@ -91,6 +91,7 @@ data class DeclaredBinding(
     val position: KeyPosition,
     val intent: BindingIntent,
     val source: SourceProvenance,
+    val triggerBehavior: TriggerBehavior = TriggerBehavior.DEFERRED,
 )
 
 enum class OverlayDefault {
