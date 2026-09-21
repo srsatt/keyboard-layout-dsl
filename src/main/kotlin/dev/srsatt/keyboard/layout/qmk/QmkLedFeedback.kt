@@ -68,6 +68,7 @@ data class QmkStatusLedState(
 }
 
 data class QmkLedFeedbackPlan(
+    val matrixAddresses: Map<KeyPosition, MatrixAddress>,
     val physicalAddresses: Map<KeyPosition, LedAddress>,
     val layers: List<QmkLedLayerState>,
     val combinedStates: List<QmkLedCombinedState>,
@@ -80,6 +81,7 @@ enum class UnsupportedLedFallback {
 }
 
 fun qmkLedFeedbackPlan(
+    matrix: DeviceAddressMap<MatrixAddress>,
     physicalLeds: DeviceAddressMap<LedAddress>,
     statusLeds: DeviceStatusLedMap,
     layers: List<QmkLedLayerState>,
@@ -87,6 +89,8 @@ fun qmkLedFeedbackPlan(
     statusStates: List<QmkStatusLedState>,
     unsupportedFallback: UnsupportedLedFallback = UnsupportedLedFallback.ERROR,
 ): QmkLedFeedbackPlan? {
+    val matrixAddresses = matrix as? DeviceAddressMap.Available
+        ?: return unsupported("Physical-key matrix mapping", (matrix as DeviceAddressMap.Unavailable).reason, unsupportedFallback)
     val physical = physicalLeds as? DeviceAddressMap.Available
         ?: return unsupported("Physical-key LED feedback", (physicalLeds as DeviceAddressMap.Unavailable).reason, unsupportedFallback)
     val status = statusLeds as? DeviceStatusLedMap.Available
@@ -122,7 +126,11 @@ fun qmkLedFeedbackPlan(
             statusStates.filterNot { it.address in status.addresses }.map { it.address.index }.distinct().sorted().joinToString()
     }
 
-    return QmkLedFeedbackPlan(physical.addresses, layers, combinedStates, statusStates)
+    require(matrixAddresses.addresses.keys == physical.addresses.keys) {
+        "Matrix and LED maps must cover the same physical positions"
+    }
+
+    return QmkLedFeedbackPlan(matrixAddresses.addresses, physical.addresses, layers, combinedStates, statusStates)
 }
 
 private fun unsupported(

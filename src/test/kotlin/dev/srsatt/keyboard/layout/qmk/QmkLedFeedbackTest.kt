@@ -11,6 +11,7 @@ class QmkLedFeedbackTest {
     private val first = position("sample.first")
     private val second = position("sample.second")
     private val profile = keyboardProfile("sample", listOf(first, second))
+    private val matrix = deviceAddressMap(profile, "sample.h:layout", listOf(first to MatrixAddress(0, 0), second to MatrixAddress(0, 1)))
     private val physical = deviceAddressMap(profile, "sample.c:g_led_config", listOf(first to LedAddress(3), second to LedAddress(7)))
     private val statuses = DeviceStatusLedMap.Available("sample.h:status", setOf(StatusLedAddress(1)))
     private val layers = listOf(
@@ -22,14 +23,14 @@ class QmkLedFeedbackTest {
     fun `unsupported physical and status targets fail unless omission is explicit`() {
         val physicalError = assertFailsWith<IllegalStateException> {
             qmkLedFeedbackPlan(
-                DeviceAddressMap.Unavailable("no per-key LEDs"), statuses, layers, emptyList(), emptyList(),
+                matrix, DeviceAddressMap.Unavailable("no per-key LEDs"), statuses, layers, emptyList(), emptyList(),
             )
         }
         assertTrue(physicalError.message.orEmpty().contains("no per-key LEDs"))
 
         val statusError = assertFailsWith<IllegalArgumentException> {
             qmkLedFeedbackPlan(
-                physical,
+                matrix, physical,
                 statuses,
                 layers,
                 emptyList(),
@@ -40,7 +41,7 @@ class QmkLedFeedbackTest {
 
         val unavailableStatus = assertFailsWith<IllegalStateException> {
             qmkLedFeedbackPlan(
-                physical,
+                matrix, physical,
                 DeviceStatusLedMap.Unavailable("no dedicated status LEDs"),
                 layers,
                 emptyList(),
@@ -51,6 +52,7 @@ class QmkLedFeedbackTest {
 
         assertNull(
             qmkLedFeedbackPlan(
+                DeviceAddressMap.Unavailable("no matrix map"),
                 DeviceAddressMap.Unavailable("no per-key LEDs"),
                 DeviceStatusLedMap.Unavailable("no status LEDs"),
                 layers,
@@ -65,7 +67,7 @@ class QmkLedFeedbackTest {
     fun `combined states require known constituent layers and mapped positions`() {
         val unknownLayer = assertFailsWith<IllegalArgumentException> {
             qmkLedFeedbackPlan(
-                physical,
+                matrix, physical,
                 statuses,
                 layers,
                 listOf(QmkLedCombinedState("RED_NAV", setOf(4, 13), HsvColor(220, 255, 200), setOf(first))),
@@ -76,7 +78,7 @@ class QmkLedFeedbackTest {
 
         val missingPosition = assertFailsWith<IllegalArgumentException> {
             qmkLedFeedbackPlan(
-                physical,
+                matrix, physical,
                 statuses,
                 layers + QmkLedLayerState("EXTRA", 6, HsvColor(1, 2, 3), setOf(position("outside"))),
                 emptyList(),
