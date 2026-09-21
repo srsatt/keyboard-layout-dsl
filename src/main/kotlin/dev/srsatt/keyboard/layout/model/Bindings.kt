@@ -90,6 +90,7 @@ data object TransparentIntent : BindingIntent
 data class DeclaredBinding(
     val position: KeyPosition,
     val intent: BindingIntent,
+    val source: SourceProvenance,
 )
 
 enum class OverlayDefault {

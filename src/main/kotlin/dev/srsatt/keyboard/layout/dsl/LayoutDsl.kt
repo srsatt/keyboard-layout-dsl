@@ -164,7 +164,7 @@ class LayerScope internal constructor(
             "Position '${position.id}' is outside the current physical group"
         }
         if (sharedChordKeys.isEmpty()) {
-            bindings += DeclaredBinding(position, intent)
+            bindings += DeclaredBinding(position, intent, sourceProvenance())
         } else {
             recordChord(ChordKeys.from(sharedChordKeys.flatten() + position), intent)
         }
