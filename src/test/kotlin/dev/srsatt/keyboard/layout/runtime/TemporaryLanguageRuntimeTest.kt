@@ -80,5 +80,60 @@ class TemporaryLanguageRuntimeTest {
         assertFalse(runtime.isActive)
     }
 
+    @Test
+    fun `normal Lang clears temporary state and toggles exactly once`() {
+        val runtime = runtime()
+        runtime.enter()
+
+        assertEquals(listOf(LanguageSwitch(en, ru)), runtime.switchLanguage())
+        assertEquals(ru, runtime.currentLanguage)
+        assertFalse(runtime.isActive)
+        assertNull(runtime.afterCommitted(CommittedOutput.Text(".")))
+        assertEquals(ru, runtime.currentLanguage)
+    }
+
+    @Test
+    fun `normal Lang outside temporary mode toggles once`() {
+        val runtime = runtime()
+
+        assertEquals(listOf(LanguageSwitch(ru, en)), runtime.switchLanguage())
+        assertEquals(en, runtime.currentLanguage)
+        assertFalse(runtime.isActive)
+    }
+
+    @Test
+    fun `reinvoking TemporaryLanguage restores and clears pending restoration`() {
+        val runtime = runtime()
+
+        assertEquals(LanguageSwitch(ru, en), runtime.enter())
+        assertEquals(LanguageSwitch(en, ru), runtime.enter())
+        assertEquals(ru, runtime.currentLanguage)
+        assertFalse(runtime.isActive)
+        assertNull(runtime.afterCommitted(CommittedOutput.Text(".")))
+
+        assertEquals(LanguageSwitch(ru, en), runtime.enter())
+        assertEquals(LanguageSwitch(en, ru), runtime.afterCommitted(CommittedOutput.Text(" ")))
+        assertEquals(ru, runtime.currentLanguage)
+        assertFalse(runtime.isActive)
+    }
+
+    @Test
+    fun `Backspace navigation and modifiers do not end the temporary word`() {
+        val runtime = runtime()
+        runtime.enter()
+
+        listOf(
+            CommittedOutput.Backspace,
+            CommittedOutput.Navigation,
+            CommittedOutput.Modifier,
+        ).forEach { output ->
+            assertNull(runtime.afterCommitted(output), output.toString())
+            assertEquals(en, runtime.currentLanguage, output.toString())
+            assertTrue(runtime.isActive, output.toString())
+        }
+
+        assertEquals(LanguageSwitch(en, ru), runtime.afterCommitted(CommittedOutput.Enter))
+    }
+
     private fun runtime() = TemporaryLanguageRuntime(en, ru, ru)
 }

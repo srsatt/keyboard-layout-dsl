@@ -13,6 +13,9 @@ sealed interface CommittedOutput {
 
     data object Enter : CommittedOutput
     data object Tab : CommittedOutput
+    data object Backspace : CommittedOutput
+    data object Navigation : CommittedOutput
+    data object Modifier : CommittedOutput
 }
 
 data class LanguageSwitch(val from: LanguageRef, val to: LanguageRef)
@@ -42,12 +45,27 @@ class TemporaryLanguageRuntime(
     }
 
     fun enter(): LanguageSwitch {
-        check(!isActive) { "Temporary language is already active" }
+        savedLanguage?.let { original ->
+            val temporary = currentLanguage
+            savedLanguage = null
+            currentLanguage = original
+            return LanguageSwitch(temporary, original)
+        }
+
         val original = currentLanguage
         val temporary = if (original == firstLanguage) secondLanguage else firstLanguage
         savedLanguage = original
         currentLanguage = temporary
         return LanguageSwitch(original, temporary)
+    }
+
+    /** Clears temporary state, then performs exactly one ordinary toggle from the active language. */
+    fun switchLanguage(): List<LanguageSwitch> = buildList {
+        savedLanguage = null
+        val previous = currentLanguage
+        val selected = if (previous == firstLanguage) secondLanguage else firstLanguage
+        currentLanguage = selected
+        add(LanguageSwitch(previous, selected))
     }
 
     fun afterCommitted(output: CommittedOutput): LanguageSwitch? {
@@ -69,4 +87,9 @@ private fun CommittedOutput.continuesWord(): Boolean = when (this) {
     CommittedOutput.Enter,
     CommittedOutput.Tab,
     -> false
+
+    CommittedOutput.Backspace,
+    CommittedOutput.Navigation,
+    CommittedOutput.Modifier,
+    -> true
 }
