@@ -52,4 +52,41 @@ class QmkDeviceBindingTest {
         }
         assertTrue(arity.message.orEmpty().contains("2 parameters but 3 positions"))
     }
+
+    @Test
+    fun `device address maps require complete one-to-one coverage`() {
+        val available = deviceAddressMap(
+            profile,
+            "sample/device.c",
+            listOf(first to MatrixAddress(0, 0), second to MatrixAddress(0, 1), third to MatrixAddress(1, 0)),
+        )
+        assertEquals(MatrixAddress(0, 1), available.addresses.getValue(second))
+
+        val duplicatePosition = assertFailsWith<IllegalArgumentException> {
+            deviceAddressMap(
+                profile,
+                "sample/device.c",
+                listOf(first to MatrixAddress(0, 0), first to MatrixAddress(0, 1), third to MatrixAddress(1, 0)),
+            )
+        }
+        assertTrue(duplicatePosition.message.orEmpty().contains("repeats physical positions"))
+
+        val duplicateAddress = assertFailsWith<IllegalArgumentException> {
+            deviceAddressMap(
+                profile,
+                "sample/device.c",
+                listOf(first to MatrixAddress(0, 0), second to MatrixAddress(0, 0), third to MatrixAddress(1, 0)),
+            )
+        }
+        assertTrue(duplicateAddress.message.orEmpty().contains("repeats addresses"))
+
+        val missing = assertFailsWith<IllegalArgumentException> {
+            deviceAddressMap(
+                profile,
+                "sample/device.c",
+                listOf(first to MatrixAddress(0, 0), second to MatrixAddress(0, 1)),
+            )
+        }
+        assertTrue(missing.message.orEmpty().contains("missing: sample.third"))
+    }
 }

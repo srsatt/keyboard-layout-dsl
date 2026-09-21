@@ -78,3 +78,38 @@ sealed interface DeviceAddressMap<out Address> {
         }
     }
 }
+
+fun <Address> deviceAddressMap(
+    profile: KeyboardProfile,
+    source: String,
+    entries: List<Pair<KeyPosition, Address>>,
+): DeviceAddressMap.Available<Address> {
+    require(source.isNotBlank()) { "A device address map source must not be blank" }
+
+    val duplicatePositions = entries.groupingBy { it.first.id }.eachCount().filterValues { it > 1 }.keys
+    require(duplicatePositions.isEmpty()) {
+        "Device address map repeats physical positions: ${duplicatePositions.sorted().joinToString()}"
+    }
+
+    val duplicateAddresses = entries.groupingBy(Pair<KeyPosition, Address>::second)
+        .eachCount()
+        .filterValues { it > 1 }
+        .keys
+    require(duplicateAddresses.isEmpty()) {
+        "Device address map repeats addresses: ${duplicateAddresses.joinToString()}"
+    }
+
+    val expected = profile.positions.map(KeyPosition::id).toSet()
+    val actual = entries.map { it.first.id }.toSet()
+    val missing = expected - actual
+    val unknown = actual - expected
+    require(missing.isEmpty() && unknown.isEmpty()) {
+        buildString {
+            append("Device address map does not cover profile '").append(profile.id).append("'")
+            if (missing.isNotEmpty()) append("; missing: ").append(missing.sorted().joinToString())
+            if (unknown.isNotEmpty()) append("; unknown: ").append(unknown.sorted().joinToString())
+        }
+    }
+
+    return DeviceAddressMap.Available(source, entries.toMap())
+}
